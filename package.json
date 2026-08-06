@@ -1,0 +1,12 @@
+{
+  "name": "sio-chatbot-poc",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Proof of concept for Bahrain Tender Board 3/2026/SIO - Social Insurance Organization Chat Bot Solution",
+  "main": "server.js",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  }
+}

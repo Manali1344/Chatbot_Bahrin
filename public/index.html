@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SIO Assistant — Proof of Concept | Tender 3/2026/SIO</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><span class="pearl-mark"></span>
+      <div>SIO Assistant<small>Social Insurance Organization · Kingdom of Bahrain</small></div>
+    </div>
+    <span class="ref">TENDER 3/2026/SIO</span>
+    <span class="spacer"></span>
+    <span class="demo-pill">Proof of concept</span>
+    <button class="icbtn" id="coverToggle" title="Requirement coverage" style="display:none">☰</button>
+  </header>
+
+  <nav class="rail">
+    <div class="eyebrow">Demo console</div>
+    <button class="navbtn on" data-view="chat"><span class="ic">◉</span>Assistant</button>
+    <button class="navbtn" data-view="kb"><span class="ic">▤</span>Knowledge base<span class="badge" id="kbCount">0</span></button>
+    <button class="navbtn" data-view="logs"><span class="ic">▦</span>Conversation log</button>
+    <button class="navbtn" data-view="dash"><span class="ic">◍</span>Dashboard</button>
+    <div class="rail-foot">
+      Built by Nanta Tech as a working demonstration of the mandatory scope. Content and rule values are sample data.
+      <br><br><button class="btn sm" id="resetAll" style="width:100%">Reset demo data</button>
+    </div>
+  </nav>
+
+  <main class="main">
+    <!-- ============ CHAT ============ -->
+    <section class="view on" id="v-chat">
+      <div class="view-head">
+        <div class="eyebrow">Live assistant</div>
+        <h1>Talk to the assistant</h1>
+        <p>Ask in any supported language, or use the microphone. Replies are grounded only in the knowledge base — anything outside it is handed to a human agent.</p>
+      </div>
+      <div class="chat-wrap">
+        <div class="device" id="device">
+          <div class="device-head">
+            <span class="pearl-mark" style="width:26px;height:26px"></span>
+            <div class="who">SIO Assistant<small>● Online · replies in your language</small></div>
+            <div class="tools">
+              <button class="icbtn" id="btnChannelWeb" title="Website widget">▭</button>
+              <button class="icbtn" id="btnChannelWa" title="WhatsApp channel">✆</button>
+              <button class="icbtn on" id="btnSpeak" title="Read replies aloud">♪</button>
+            </div>
+          </div>
+          <div class="stream" id="stream" aria-live="polite"></div>
+          <div class="sugs" id="sugs"></div>
+          <div class="composer">
+            <div class="row">
+              <button class="mic" id="mic" title="Speak your question">🎙</button>
+              <textarea id="input" rows="1" placeholder="Type your question…"></textarea>
+              <button class="send" id="send">Send</button>
+            </div>
+            <div class="opts">
+              <select id="lang">
+                <option value="auto">Auto-detect language</option>
+                <option value="en">English</option>
+                <option value="ar">العربية · Arabic</option>
+                <option value="hi">हिन्दी · Hindi</option>
+                <option value="ur">اردو · Urdu</option>
+                <option value="ml">മലയാളം · Malayalam</option>
+                <option value="ta">தமிழ் · Tamil</option>
+                <option value="bn">বাংলা · Bengali</option>
+                <option value="tl">Tagalog</option>
+              </select>
+              <span class="hint" id="chanHint">Channel: website widget</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="side">
+          <div class="panel">
+            <h3>Try a scenario</h3>
+            <button class="scenario" data-say="What are the conditions to receive an old-age pension?"><em>English · eligibility</em>What are the conditions to receive an old-age pension?</button>
+            <button class="scenario" data-say="كم تبلغ نسبة الاشتراك الشهري في التأمينات؟"><em>Arabic · RTL</em>كم تبلغ نسبة الاشتراك الشهري في التأمينات؟</button>
+            <button class="scenario" data-say="My salary is 800 BHD and I have 24 years of service. What pension can I expect?"><em>English · benefit estimate</em>My salary is 800 BHD and I have 24 years of service. What pension can I expect?</button>
+            <button class="scenario" data-say="मेरी नौकरी चली गई है, क्या मुझे बेरोज़गारी लाभ मिल सकता है?"><em>Hindi · unemployment</em>मेरी नौकरी चली गई है, क्या मुझे बेरोज़गारी लाभ मिल सकता है?</button>
+            <button class="scenario" data-say="Someone charged my account twice and nobody is answering. I want to file a formal complaint."><em>English · escalation</em>Someone charged my account twice — I want to file a complaint.</button>
+          </div>
+          <div class="panel">
+            <h3>What this proves</h3>
+            <p style="margin:0;font-size:12.5px;color:var(--muted)">Every reply is generated live and logged. Switch the channel icon to see the same engine served over WhatsApp, and open the knowledge base to change an answer without touching code.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ KB ============ -->
+    <section class="view" id="v-kb">
+      <div class="view-head">
+        <div class="eyebrow">Requirement 6 · Knowledge base management</div>
+        <h1>Knowledge base</h1>
+        <p>Authorised SIO staff edit answers here. Changes apply to the next question immediately — no vendor involvement, no redeployment.</p>
+      </div>
+      <div class="toolbar">
+        <button class="btn primary" id="kbNew">Add article</button>
+        <input type="text" id="kbSearch" placeholder="Search articles…" style="flex:1;min-width:180px">
+      </div>
+      <div class="grid two">
+        <div>
+          <div id="kbList"></div>
+        </div>
+        <div>
+          <div class="panel">
+            <h3>Benefit calculation rules</h3>
+            <div class="note" style="margin-bottom:10px">Sample values for the demo. In delivery these are loaded from SIO's published regulations and version-controlled by SIO staff.</div>
+            <div id="rules"></div>
+            <button class="btn sm" id="saveRules" style="margin-top:8px">Save rules</button>
+          </div>
+          <div class="panel" style="margin-top:14px">
+            <h3>Grounding behaviour</h3>
+            <p style="margin:0;font-size:12.5px;color:var(--muted)">The assistant answers only from these articles and rules. If a question isn't covered, it says so and offers a handoff rather than guessing. Every estimate is computed by the rule engine, not by the language model.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ LOGS ============ -->
+    <section class="view" id="v-logs">
+      <div class="view-head">
+        <div class="eyebrow">Requirement 8 · Interaction logging</div>
+        <h1>Conversation log</h1>
+        <p>Every interaction is stored with language, intent, confidence and outcome for audit and quality review. Filter, inspect, export.</p>
+      </div>
+      <div class="toolbar">
+        <select id="fLang"><option value="">All languages</option></select>
+        <select id="fOut"><option value="">All outcomes</option><option value="resolved">Resolved by bot</option><option value="escalated">Escalated to agent</option></select>
+        <input type="text" id="fText" placeholder="Search question text…" style="flex:1;min-width:160px">
+        <button class="btn" id="exportCsv">Export CSV</button>
+      </div>
+      <div class="wrapbox">
+        <table class="data">
+          <thead><tr><th>Time</th><th>Question</th><th>Lang</th><th>Intent</th><th>Conf.</th><th>Channel</th><th>Outcome</th></tr></thead>
+          <tbody id="logRows"></tbody>
+        </table>
+      </div>
+      <p class="hint" id="logCount" style="margin-top:8px"></p>
+    </section>
+
+    <!-- ============ DASH ============ -->
+    <section class="view" id="v-dash">
+      <div class="view-head">
+        <div class="eyebrow">Requirement 8 · Built-in dashboard</div>
+        <h1>Performance dashboard</h1>
+        <p>Live figures from the conversation log. Sample history is pre-loaded so the trend view is meaningful during the demo.</p>
+      </div>
+      <div class="grid stats" id="stats"></div>
+      <div class="grid two" style="margin-top:14px">
+        <div class="panel"><h3>Conversations by language</h3><div id="chLang"></div></div>
+        <div class="panel"><h3>Top question topics</h3><div id="chIntent"></div></div>
+      </div>
+      <div class="sparkwrap" style="margin-top:14px">
+        <h3 style="margin:3px 0 10px;font-size:12.5px">Daily volume · last 14 days</h3>
+        <div id="spark"></div>
+      </div>
+      <div class="panel" style="margin-top:14px">
+        <h3>Open handoffs</h3>
+        <div id="tickets"></div>
+      </div>
+    </section>
+  </main>
+
+  <aside class="cover" id="cover">
+    <div class="eyebrow">Mandatory scope</div>
+    <h2>Requirement coverage</h2>
+    <p class="sub">Each item lights up when you exercise it in this demo.</p>
+    <div class="cover-progress"><i id="covBar"></i></div>
+    <div id="reqs"></div>
+    <div class="cover-foot">
+      <div class="eyebrow" style="margin-bottom:4px">Not in this demo</div>
+      <p style="margin:0;font-size:11.5px;color:var(--muted)">SSO and core-system integration, production security hardening, and Bahrainisation compliance are covered in the technical bid, not the POC.</p>
+    </div>
+  </aside>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
