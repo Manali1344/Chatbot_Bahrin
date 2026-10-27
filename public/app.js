@@ -42,6 +42,7 @@ let LOGS=[];
 let STATE={cov:{},channel:'web',speak:true,seeded:false};
 let history=[];     // model conversation history
 let busy=false, recog=null, recording=false;
+let lastLang='en';  // language of the last reply; the mic listens in it when set to auto-detect
 
 /* ---------- storage ---------- */
 async function sGet(k){ try{const v=localStorage.getItem(k); return v?JSON.parse(v):null;}catch(e){return null;} }
@@ -155,12 +156,39 @@ document.getElementById('btnChannelWa').onclick=()=>{setChannel('whatsapp');save
 document.getElementById('btnSpeak').onclick=e=>{ STATE.speak=!STATE.speak; saveState();
   e.currentTarget.classList.toggle('on',STATE.speak); toast(STATE.speak?'Replies will be read aloud':'Audio replies off'); };
 
+// Voices load asynchronously in Chrome/Edge; keep a cached list that refreshes when they arrive.
+let VOICES=[];
+function loadVoices(){ VOICES='speechSynthesis' in window?speechSynthesis.getVoices():[]; }
+if('speechSynthesis' in window){ loadVoices(); speechSynthesis.addEventListener('voiceschanged',loadVoices); }
+
+// Exact locale first (ar-BH), then any regional variant of the language (ar-SA, ar-EG…),
+// preferring higher-quality online/natural voices.
+function pickVoice(lang){
+  if(!VOICES.length) loadVoices();
+  const want=(SPEECH[lang]||'en-US').toLowerCase(), base=want.split('-')[0];
+  const norm=v=>v.lang.replace('_','-').toLowerCase();
+  const rank=v=>/natural|online|google/i.test(v.name)?0:1;
+  const exact=VOICES.filter(v=>norm(v)===want).sort((a,b)=>rank(a)-rank(b));
+  if(exact.length) return exact[0];
+  const pref=base==='ar'?['ar-bh','ar-sa','ar-ae','ar-kw','ar-qa','ar-eg']:[];
+  const same=VOICES.filter(v=>norm(v).split('-')[0]===base)
+    .sort((a,b)=>{ const pa=pref.indexOf(norm(a)), pb=pref.indexOf(norm(b));
+      return ((pa<0?99:pa)-(pb<0?99:pb))||(rank(a)-rank(b)); });
+  return same[0]||null;
+}
+
 function speak(text,lang){
   if(!('speechSynthesis' in window)) return toast('This browser has no speech synthesis');
   try{
     speechSynthesis.cancel();
     const u=new SpeechSynthesisUtterance(text);
-    u.lang=SPEECH[lang]||'en-US'; u.rate=.98;
+    const v=pickVoice(lang);
+    if(v){ u.voice=v; u.lang=v.lang; }
+    else{
+      u.lang=SPEECH[lang]||'en-US';
+      if(lang!=='en') toast(`No ${LANGS[lang]||lang} voice installed — add one in Windows speech settings or use Edge`);
+    }
+    u.rate=.98;
     speechSynthesis.speak(u); mark('voice');
   }catch(e){ toast('Audio playback unavailable here'); }
 }
@@ -169,7 +197,7 @@ document.getElementById('mic').onclick=()=>{
   if(!SR){ toast('Speech input needs Chrome or Edge — typing works everywhere'); return; }
   if(recording){ recog&&recog.stop(); return; }
   const sel=document.getElementById('lang').value;
-  recog=new SR(); recog.lang=SPEECH[sel==='auto'?'en':sel]; recog.interimResults=true; recog.continuous=false;
+  recog=new SR(); recog.lang=SPEECH[sel==='auto'?lastLang:sel]; recog.interimResults=true; recog.continuous=false;
   recog.onstart=()=>{recording=true;document.getElementById('mic').classList.add('rec');mark('voice');};
   recog.onend=()=>{recording=false;document.getElementById('mic').classList.remove('rec');};
   recog.onerror=()=>{toast('Could not hear anything — check microphone access');};
@@ -245,6 +273,7 @@ async function send(){
   }
 
   const lang=d.lang&&LANGS[d.lang]?d.lang:'en';
+  lastLang=lang;
   const bub=host.querySelector('.bub');
   bub.dir=RTL.includes(lang)?'rtl':'ltr'; bub.textContent=d.reply||'';
   history.push({role:'assistant',content:JSON.stringify({reply:d.reply,intent:d.intent})});
