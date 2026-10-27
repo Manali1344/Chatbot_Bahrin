@@ -16,6 +16,15 @@ In VS Code you can also press **F5** — the launch config starts the server and
 
 The key stays in `.env` on the server side; the browser calls `/api/chat` and never sees it.
 
+### Voice in every browser
+
+No speech key is needed. Read-aloud uses the browser's own voice when one is installed for the
+language (Edge has natural Arabic voices); otherwise the server fetches free audio through
+`/api/tts`, so Arabic also plays in Chrome, Firefox and Safari. Speech input uses the browser's
+built-in recognition in Chrome, Edge and Safari, and in Firefox runs Whisper inside the page
+(a one-time ~75 MB model download). Both need internet access. The free read-aloud source is
+unofficial — the delivery build should use a contracted speech service.
+
 ## Demo path
 
 Roughly four minutes, and it lights all eight items on the coverage rail:
@@ -36,7 +45,8 @@ Roughly four minutes, and it lights all eight items on the coverage rail:
 - Replace the sample rule values (Knowledge base → Benefit calculation rules) with the real
   figures from SIO's regulations. They are placeholders and labelled as such.
 - Review the ten seed knowledge articles against SIO's published service descriptions.
-- Speech input needs Chrome or Edge. Typing works in every browser.
+- Voice works in every current browser; Edge gives the best Arabic voice. In Firefox, press
+  the mic once before the demo so the speech model is already downloaded.
 
 ## Layout
 

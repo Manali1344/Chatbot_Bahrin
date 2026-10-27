@@ -177,34 +177,126 @@ function pickVoice(lang){
   return same[0]||null;
 }
 
-function speak(text,lang){
-  if(!('speechSynthesis' in window)) return toast('This browser has no speech synthesis');
+// Read-aloud: the browser's own voice when it has one for the language (Edge has natural
+// Arabic voices), otherwise free audio from the local server (/api/tts) so every browser speaks.
+let player=null;
+
+function stopAudio(){
+  if(player){ player.pause(); player=null; }
+  if('speechSynthesis' in window) speechSynthesis.cancel();
+}
+
+async function speak(text,lang){
+  stopAudio();
+  const v=pickVoice(lang);
+  if(v) return speakBrowser(text,v);
   try{
-    speechSynthesis.cancel();
+    const res=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text,lang})});
+    if(!res.ok) throw new Error((await res.json().catch(()=>({}))).error||res.status);
+    const url=URL.createObjectURL(await res.blob());
+    const a=new Audio(url); player=a;
+    a.onended=()=>URL.revokeObjectURL(url);
+    await a.play(); mark('voice');
+  }catch(e){
+    if(e&&e.name==='NotAllowedError') return toast('The browser blocked autoplay — press play audio');
+    toast(`Could not play ${LANGS[lang]||lang} audio — ${e.message||'check the network'}`);
+  }
+}
+
+function speakBrowser(text,v){
+  try{
     const u=new SpeechSynthesisUtterance(text);
-    const v=pickVoice(lang);
-    if(v){ u.voice=v; u.lang=v.lang; }
-    else{
-      u.lang=SPEECH[lang]||'en-US';
-      if(lang!=='en') toast(`No ${LANGS[lang]||lang} voice installed — add one in Windows speech settings or use Edge`);
-    }
-    u.rate=.98;
+    u.voice=v; u.lang=v.lang; u.rate=.98;
     speechSynthesis.speak(u); mark('voice');
   }catch(e){ toast('Audio playback unavailable here'); }
 }
+
+// Speech input: the browser's built-in recognition (Chrome, Edge, Safari) when it exists,
+// otherwise Whisper running inside the page (Firefox, or browsers where built-in fails).
+const micLang=()=>{ const sel=document.getElementById('lang').value; return sel==='auto'?lastLang:sel; };
+const setRec=on=>{ recording=on; document.getElementById('mic').classList.toggle('rec',on); };
+let srBroken=false;
+
 document.getElementById('mic').onclick=()=>{
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){ toast('Speech input needs Chrome or Edge — typing works everywhere'); return; }
   if(recording){ recog&&recog.stop(); return; }
-  const sel=document.getElementById('lang').value;
-  recog=new SR(); recog.lang=SPEECH[sel==='auto'?lastLang:sel]; recog.interimResults=true; recog.continuous=false;
-  recog.onstart=()=>{recording=true;document.getElementById('mic').classList.add('rec');mark('voice');};
-  recog.onend=()=>{recording=false;document.getElementById('mic').classList.remove('rec');};
-  recog.onerror=()=>{toast('Could not hear anything — check microphone access');};
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR||srBroken) return recordWhisper();
+  recog=new SR(); recog.lang=SPEECH[micLang()]; recog.interimResults=true; recog.continuous=false;
+  recog.onstart=()=>{setRec(true);mark('voice');};
+  recog.onend=()=>setRec(false);
+  recog.onerror=e=>{
+    if(e.error==='network'||e.error==='service-not-allowed'||e.error==='language-not-supported'){
+      srBroken=true; toast('Built-in speech input is unavailable here — press the mic again to use on-device recognition');
+    }else toast('Could not hear anything — check microphone access');
+  };
   recog.onresult=e=>{ let t=''; for(const r of e.results) t+=r[0].transcript;
-    document.getElementById('input').value=t; if(e.results[e.results.length-1].isFinal) setTimeout(send,250); };
+    inputEl.value=t; if(e.results[e.results.length-1].isFinal) setTimeout(send,250); };
   recog.start();
 };
+
+const WHISPER_LANG={en:'english',ar:'arabic',hi:'hindi',ur:'urdu',ml:'malayalam',ta:'tamil',bn:'bengali',tl:'tagalog'};
+let whisper=null;
+function loadWhisper(){
+  if(!whisper){
+    toast('Loading the speech model — first time only, about 75 MB');
+    whisper=import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2/dist/transformers.min.js')
+      .then(m=>m.pipeline('automatic-speech-recognition','Xenova/whisper-base'))
+      .catch(e=>{ whisper=null; throw e; });
+  }
+  return whisper;
+}
+
+// Record raw PCM with Web Audio, stop after a pause in speech, resample to 16 kHz for Whisper.
+async function recordWhisper(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    toast('This browser cannot record audio — typing works everywhere'); return; }
+  let stream;
+  try{ stream=await navigator.mediaDevices.getUserMedia({audio:true}); }
+  catch(e){ toast('Microphone access was blocked — allow it in the address bar and try again'); return; }
+  stopAudio(); loadWhisper().catch(()=>{});
+  const ctx=new (window.AudioContext||window.webkitAudioContext)();
+  const src=ctx.createMediaStreamSource(stream);
+  const node=ctx.createScriptProcessor(4096,1,1);
+  const chunks=[]; const t0=Date.now(); let lastVoice=Date.now(), heard=false, done=false;
+  const sel=document.getElementById('lang').value;
+
+  const finish=async()=>{
+    if(done) return; done=true;
+    node.disconnect(); src.disconnect(); stream.getTracks().forEach(t=>t.stop());
+    const rate=ctx.sampleRate; ctx.close(); setRec(false); recog=null;
+    if(!heard){ toast('Could not hear anything — check microphone access'); return; }
+    const ph=inputEl.placeholder; inputEl.placeholder='Transcribing…';
+    try{
+      const asr=await loadWhisper();
+      // Auto-detect lets Whisper identify the spoken language itself.
+      const out=await asr(resample(chunks,rate),
+        sel==='auto'?{task:'transcribe'}:{language:WHISPER_LANG[sel],task:'transcribe'});
+      const text=(out&&out.text||'').trim();
+      if(!text) toast('Could not make out the words — try again or type the question');
+      else{ inputEl.value=text; setTimeout(send,250); }
+    }catch(e){ console.warn(e); toast('Could not load the speech model — check the network, or type the question'); }
+    inputEl.placeholder=ph;
+  };
+
+  node.onaudioprocess=e=>{
+    const d=e.inputBuffer.getChannelData(0); chunks.push(new Float32Array(d));
+    let s=0; for(let i=0;i<d.length;i++) s+=d[i]*d[i];
+    if(Math.sqrt(s/d.length)>0.02){ heard=true; lastVoice=Date.now(); }
+    const now=Date.now();
+    if((heard&&now-lastVoice>1500)||(!heard&&now-t0>6000)||now-t0>30000) finish();
+  };
+  src.connect(node); node.connect(ctx.destination);
+  recog={stop:finish}; setRec(true); mark('voice');
+}
+
+function resample(chunks,rate){
+  const len=chunks.reduce((n,c)=>n+c.length,0), all=new Float32Array(len);
+  let o=0; for(const c of chunks){ all.set(c,o); o+=c.length; }
+  const ratio=rate/16000, n=Math.floor(len/ratio), out=new Float32Array(n);
+  for(let i=0;i<n;i++) out[i]=all[Math.floor(i*ratio)];
+  return out;
+}
 
 /* ---------- send ---------- */
 const inputEl=document.getElementById('input');

@@ -18,7 +18,11 @@ Deliberately dependency-free so it runs anywhere with Node 18+ and no install st
 ```
 server.js          Node http server. Serves public/ and proxies POST /api/chat
                    to the Anthropic Messages API with the key from .env.
-                   The browser never holds a key.
+                   The browser never holds a key. POST /api/tts returns free MP3
+                   speech (unofficial Google Translate voice) for languages the
+                   browser has no installed voice for. Speech input uses browser
+                   SpeechRecognition, or in-page Whisper (transformers.js) where
+                   that is missing, e.g. Firefox.
 public/index.html  Markup: top bar, left nav, four views, right coverage rail.
 public/styles.css  All styling. CSS custom properties at :root.
 public/app.js      All behaviour. No framework, no build step, no bundler.

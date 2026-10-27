@@ -28,6 +28,7 @@ const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.ANTHROPIC_API_KEY;
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
 const PUBLIC = path.join(__dirname, 'public');
+const TTS_LANGS = ['en', 'ar', 'hi', 'ur', 'ml', 'ta', 'bn', 'tl'];
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -89,6 +90,53 @@ async function handleChat(req, res) {
   }
 }
 
+// --- speech: free text-to-speech via Google Translate's voice ---------------
+// No key needed. Used when the browser has no installed voice for the language
+// (for example Arabic in Chrome or Firefox on Windows). Unofficial endpoint, so
+// the production build should swap in a contracted speech service.
+async function handleTts(req, res) {
+  let body = '';
+  for await (const chunk of req) {
+    body += chunk;
+    if (body.length > 1e5) { req.destroy(); return; }
+  }
+  let payload;
+  try { payload = JSON.parse(body); }
+  catch { return json(res, 400, { error: 'The request body was not valid JSON.' }); }
+
+  const lang = TTS_LANGS.includes(payload.lang) ? payload.lang : 'en';
+  const text = String(payload.text || '').replace(/\s+/g, ' ').trim().slice(0, 2000);
+  if (!text) return json(res, 400, { error: 'Nothing to read aloud.' });
+
+  // The endpoint takes at most ~200 characters per request: split on sentence
+  // and word boundaries, fetch each part, and join the MP3 frames back together.
+  const parts = [];
+  let rest = text;
+  while (rest.length > 180) {
+    let cut = Math.max(...['.', '؟', '?', '!', '،', ',', '।', '۔'].map(p => rest.lastIndexOf(p, 180)));
+    if (cut < 60) cut = rest.lastIndexOf(' ', 180);
+    if (cut < 1) cut = 180;
+    parts.push(rest.slice(0, cut + 1).trim());
+    rest = rest.slice(cut + 1).trim();
+  }
+  if (rest) parts.push(rest);
+
+  try {
+    const audio = await Promise.all(parts.map(async (q, i) => {
+      const url = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob'
+        + `&tl=${lang}&total=${parts.length}&idx=${i}&textlen=${q.length}&q=${encodeURIComponent(q)}`;
+      const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      if (!r.ok) throw new Error(`speech service returned ${r.status}`);
+      return Buffer.from(await r.arrayBuffer());
+    }));
+    res.writeHead(200, { 'Content-Type': 'audio/mpeg' });
+    res.end(Buffer.concat(audio));
+  } catch (err) {
+    console.error('[tts]', err.message);
+    return json(res, 502, { error: 'Could not reach the speech service. Check network access.' });
+  }
+}
+
 function serveStatic(req, res) {
   const clean = decodeURIComponent(req.url.split('?')[0]);
   const rel = clean === '/' ? 'index.html' : clean.replace(/^\/+/, '');
@@ -105,6 +153,7 @@ function serveStatic(req, res) {
 
 http.createServer((req, res) => {
   if (req.url === '/api/chat' && req.method === 'POST') return handleChat(req, res);
+  if (req.url === '/api/tts' && req.method === 'POST') return handleTts(req, res);
   if (req.method !== 'GET') { res.writeHead(405).end(); return; }
   serveStatic(req, res);
 }).listen(PORT, () => {
